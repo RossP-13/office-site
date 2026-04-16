@@ -10,7 +10,7 @@ npm run dev
 ```
 This will provide quick access to the website for the first time, but will not run optimally and will require the terminal to be open.
 
-Dashboard Website Database Deployment
+## Dashboard Website Database Deployment
 Install Visual Studio 2019 x64 Redistributable.
 
 This site runs off of  a MySQL server hosted on your device. To setup MySQL, please download the MySQL Community Edition version 8.0.45 at this url: https://dev.mysql.com/downloads/mysql/8.0.html 
