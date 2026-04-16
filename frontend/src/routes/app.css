@@ -1,0 +1,78 @@
+@import 'tailwindcss';
+
+@import '@fontsource/noto-serif/700.css';
+@import '@fontsource/lato/400.css';
+@import '@fontsource/lato/700.css';
+
+@import '@skeletonlabs/skeleton'; 
+@import '@skeletonlabs/skeleton-svelte'; 
+
+@source "../node_modules/layerchart";
+
+@theme {
+    --font-base: "Lato", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;
+    --font-serif: "Noto Serif", ui-serif, Georgia, serif;
+
+    --color-logo-green-100: #4E801F;
+    --color-logo-green-200: #6F984D;
+    --color-logo-green-300: #8AAB6D;
+    --color-logo-green-400: #A4BD8D;
+    --color-logo-green-500: #BFD1AE;
+    --color-logo-green-600: #DAE4D0;
+    --color-logo-green-700: #EAf0E4;
+
+    --color-logo-blue-100: #004C97;
+    --color-logo-blue-200: #1E6BAC;
+    --color-logo-blue-300: #5684BC;
+    --color-logo-blue-400: #7F9FCB;
+    --color-logo-blue-500: #A6BBDA;
+    --color-logo-blue-600: #CCD7EA;
+    --color-logo-blue-700: #E4EAF4;
+
+    --color-core-green-100: #78AA00;
+    --color-core-green-200: #92BA40;
+    --color-core-green-300: #A8C666;
+    --color-core-green-400: #BCD389;
+    --color-core-green-500: #D1E0AC;
+    --color-core-green-600: #E4EDCF;
+    --color-core-green-700: #F1F5E6;
+
+    --color-core-blue-100: #147BD1;
+    --color-core-blue-200: #5A92DA;
+    --color-core-blue-300: #7DA5E1;
+    --color-core-blue-400: #9DB9E8;
+    --color-core-blue-500: #BBCDEF;
+    --color-core-blue-600: #D8E2F5;
+    --color-core-blue-700: #EBF0FA;
+    
+    --color-background: #ECE9E6;
+    --color-navbar: #D9D9D9;
+}
+
+:root {
+    --font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;
+    --font-base: "Lato", ui-sans-serif, system-ui, sans-serif;
+    --base-font-family: "Lato", ui-sans-serif, system-ui, sans-serif;
+    --default-font-family: "Lato", ui-sans-serif, system-ui, sans-serif;
+}
+
+@theme inline {
+    --color-background: var(--color-background);
+}
+
+h1 {
+    @apply font-serif text-2xl text-black mb-4
+}
+
+h3 {
+    @apply font-sans text-xl text-black
+}
+
+p {
+    @apply font-sans text-black
+}
+
+a {
+    @apply font-serif text-black
+}
