@@ -92,3 +92,4 @@ You should now be able to navigate to https://dashboard.localhost/ or https://la
 If you are presented with a safety warning, run this command to permanently trust the site:
 ```C:\Apps\office-site\caddy\caddy.exe trust```
 
+Authors: Ross Pochiro, Madison Miller, Alex Vasilcoiu, Logan Shaw, Ben Bui, Krysstal Randolph, Owen Armstrong
