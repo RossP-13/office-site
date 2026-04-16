@@ -1,5 +1,5 @@
-## Office Site Setup
-### Dashboard Website Temporary Deployment
+# Office Site Setup
+## Dashboard Website Temporary Deployment
 On the machine that will host the web server, clone the Git repository.
 ```git clone https://github.com/RossP-13/office-site.git```
 Navigate to the frontend folder in the terminal and run dev
@@ -38,7 +38,7 @@ Afterwards if you wish, you can create a new, stronger MySQL password using the 
 Afterwards if you wish, you can create a new, stronger MySQL password using the below  command in the MySQL CLI.
 ```ALTER USER 'username'@'localhost' IDENTIFIED BY 'new_password';```
 Afterwards if you wish, you can create a new, stronger MySQL password using the below 
-### Dashboard Website Permanent Deployment
+## Dashboard Website Permanent Deployment
 Install PowerToys from the Microsoft Store to use WinGet.
 Install Git and NSSM, then restart your terminal.
 ```
