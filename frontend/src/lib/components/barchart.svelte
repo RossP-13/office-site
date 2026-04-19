@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { Bar } from 'svelte-chartjs';
   import {
     Chart,
@@ -15,61 +16,146 @@
 
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-  const allWeeks = [
-    {
-      label: 'Week 1 (Jan 5 - Jan 11)',
-      kestrel:    [12, 20, 15, 18, 22, 30, 10],
-      nonkestrel: [8,  14, 10, 12, 18, 25, 6 ],
-    },
-    {
-      label: 'Week 2 (Jan 12 - Jan 18)',
-      kestrel:    [18, 22, 19, 25, 28, 35, 14],
-      nonkestrel: [10, 16, 13, 20, 22, 30, 9 ],
-    },
-    {
-      label: 'Week 3 (Jan 19 - Jan 25)',
-      kestrel:    [10, 18, 22, 20, 24, 28, 12],
-      nonkestrel: [6,  12, 15, 14, 18, 22, 8 ],
-    },
-    {
-      label: 'Week 4 (Jan 26 - Feb 1)',
-      kestrel:    [14, 24, 18, 22, 26, 32, 16],
-      nonkestrel: [9,  18, 12, 16, 20, 28, 11],
-    },
-  ];
+  type DayData = {
+  date: string;
+  kestrel: number;
+  other: number;
+  };
+
+  let allWeeks = $state<any[]>([]);
+  let loading = $state(true);
 
   let currentWeekIndex = $state(0);
 
   let kestrelColor = $state('');
   let nonkestrelColor = $state('');
 
-  let data = $derived({
-    labels: days,
-    datasets: [
-      {
-        label: 'Kestrel Visits',
-        data: allWeeks[currentWeekIndex].kestrel,
-        borderColor: kestrelColor,
-        backgroundColor: kestrelColor + '33',
-        borderWidth: 2,
-        borderRadius: 4,
-      },
-      {
-        label: 'Non-Kestrel Visits',
-        data: allWeeks[currentWeekIndex].nonkestrel,
-        borderColor: nonkestrelColor,
-        backgroundColor: nonkestrelColor + '33',
-        borderWidth: 2,
-        borderRadius: 4,
-      },
-    ],
-  });
+  let { boxID = null }: { boxID?: string | null } = $props();
+  let lastFetchedBoxID = $state<string | null | undefined>(undefined);
 
-  onMount(() => {
-    const style = getComputedStyle(document.documentElement);
-    kestrelColor = style.getPropertyValue('--color-core-green-100').trim();
-    nonkestrelColor = style.getPropertyValue('--color-core-blue-100').trim();
-  });
+  //changes data to be within format for chart
+  function buildWeeks(data: DayData[]) {
+    if (!data.length) return [];
+
+    const weeks: any[] = [];
+
+    let currentWeek: any = null;
+    let weekIndex = 1;
+
+    let startDate = new Date(data[0]?.date);
+
+    function startOfWeek(date: Date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      d.setDate(d.getDate() - day);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
+    let currentWeekStart = startOfWeek(startDate);
+
+    function formatLabel(start: Date) {
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+
+      const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+
+      return `Week ${weekIndex++} (${start.toLocaleDateString(undefined, opts)} - ${end.toLocaleDateString(undefined, opts)})`;
+    }
+
+    for (const row of data) {
+      const rowDate = new Date(row.date);
+      const weekStart = startOfWeek(rowDate);
+
+      if (!currentWeek || weekStart.getTime() !== currentWeekStart.getTime()) {
+        currentWeekStart = weekStart;
+
+        currentWeek = {
+          label: formatLabel(weekStart),
+          kestrel: Array(7).fill(0),
+          nonkestrel: Array(7).fill(0),
+          _start: weekStart
+        };
+
+        weeks.push(currentWeek);
+      }
+
+      const dayIndex = rowDate.getDay();
+
+      currentWeek.kestrel[dayIndex] = row.kestrel;
+      currentWeek.nonkestrel[dayIndex] = row.other;
+    }
+
+  return weeks;
+}
+
+onMount(async () => {
+  const style = getComputedStyle(document.documentElement);
+  kestrelColor = style.getPropertyValue('--color-core-green-100').trim();
+  nonkestrelColor = style.getPropertyValue('--color-core-blue-100').trim();
+});
+
+async function fetchBarData(id: string | null) {
+  try {
+    loading = true;
+    const url = id
+      ? `/api/graphCalcRoutes/barChart/?boxID=${encodeURIComponent(id)}`
+      : '/api/graphCalcRoutes/barChart/';
+    const res = await fetch(url);
+    const raw: DayData[] = await res.json();
+
+    if (!Array.isArray(raw)) {
+      console.error('Invalid API response', raw);
+      return;
+    }
+
+    currentWeekIndex = 0;
+    allWeeks = buildWeeks(raw);
+  } catch (err) {
+    console.error('Failed to fetch chart data', err);
+  } finally {
+    loading = false;
+  }
+}
+
+$effect(() => {
+  if (!browser) return;
+  if (lastFetchedBoxID === boxID) return;
+  lastFetchedBoxID = boxID;
+  fetchBarData(boxID);
+});
+
+let data = $derived(
+  (() => {
+    const week = allWeeks[currentWeekIndex];
+
+    if (!week) {
+      return { labels: days, datasets: [] };
+    }
+
+    return {
+      labels: days,
+      datasets: [
+        {
+          label: 'Kestrel Visits',
+          data: week.kestrel,
+          borderColor: kestrelColor,
+          backgroundColor: kestrelColor + '33',
+          borderWidth: 2,
+          borderRadius: 4,
+        },
+        {
+          label: 'Non-Kestrel Visits',
+          data: week.nonkestrel,
+          borderColor: nonkestrelColor,
+          backgroundColor: nonkestrelColor + '33',
+          borderWidth: 2,
+          borderRadius: 4,
+        },
+      ],
+    };
+  })()
+);
 
   const options: ChartOptions<'bar'> = {
     responsive: true,
@@ -83,6 +169,12 @@
     scales: {
       y: {
         beginAtZero: true,
+        grace: 0,
+        ticks: {
+          stepSize: 1,
+          precision: 0,
+          callback: (value) => Math.floor(Number(value)),
+        },
         title: {
           display: true,
           text: 'Number of Visits',
@@ -111,9 +203,8 @@
     </button>
 
     <span class="text-sm font-medium">
-      {allWeeks[currentWeekIndex].label}
+      {allWeeks[currentWeekIndex]?.label ?? 'Loading...'}
     </span>
-
     <button
       class="px-3 py-1 rounded-md text-sm border border-border bg-background
         text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40

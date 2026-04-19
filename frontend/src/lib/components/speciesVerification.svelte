@@ -1,29 +1,155 @@
 <script>
-  // Props: pass in the bird ID and confidence score
-  export let birdId = "American Kestrel";
-  export let confidence = 92;
-  export let imageUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Common_kestrel_falco_tinnunculus.jpg/1200px-Common_kestrel_falco_tinnunculus.jpg";
+
+  console.log('SpeciesVerification component loaded');
+
+  // Props: pass in array of observations to verify
+  export let observations = [];
   export let open = true;
 
   // Internal state
+  let currentIndex = 0;
   let isCorrect = null; // null | true | false
   let correctionText = "";
 
-  function handleSubmit() {
-    const result = {
-      birdId,
-      confidence,
-      verified: isCorrect,
-      correction: isCorrect === false ? correctionText : null,
-    };
-    console.log("Submitted:", result);
-    // Dispatch custom event so parent can listen
-    dispatch("submit", result);
-    open = false;
+  // Debug logging
+  $: console.log('SpeciesVerification state:', { currentIndex, isCorrect, observationsLength: observations.length, isSubmitting });
+  $: if (isCorrect !== null) {
+    console.log('isCorrect changed to:', isCorrect);
+  }
+
+  let isSubmitting = false;
+
+  // Get current observation
+  $: currentObservation = observations[currentIndex] || {};
+  $: birdId = currentObservation.observationSpecies || "Unknown";
+  $: confidence = currentObservation.confidence || 0;
+  $: observationID = currentObservation.observationID;
+  $: imageUrl = ""; // Placeholder
+
+  async function fetchImage(observationID) {
+  if (!observationID) return;
+
+  try {
+      const res = await fetch(
+        `/api/dataApiRoutes/images/imageObservation/?observationID=${observationID}`
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to fetch image");
+      }
+
+      const data = await res.json();
+
+      // Your SQL returns an array → take first image
+      const image = data?.[0];
+
+      if (image?.src ?? image?.filePath) {
+        imageUrl = image.src ?? image.filePath;
+      } else {
+        imageUrl = ""; // fallback if no image exists
+      }
+    } catch (err) {
+      console.error("Error fetching image:", err);
+      imageUrl = "";
+    }
+  }
+
+$: if (observationID) {
+    fetchImage(observationID);
+} 
+
+
+  function handleButtonClick() {
+    console.log('Button clicked! isCorrect:', isCorrect, 'isSubmitting:', isSubmitting, 'disabled:', isCorrect === null || isSubmitting);
+
+    if (isCorrect === null || isSubmitting) {
+      console.log('Button is disabled, not proceeding with submit');
+      return;
+    }
+
+    handleSubmit();
+  }
+
+  async function handleSubmit() {
+    console.log('handleSubmit called, currentIndex:', currentIndex, 'observations.length:', observations.length);
+    console.log('isCorrect:', isCorrect, 'observationID:', observationID);
+
+    if (!observationID) {
+      console.log('No observationID, returning');
+      return;
+    }
+
+    isSubmitting = true;
+
+    try {
+      const result = {
+        observationID,
+        birdId,
+        confidence,
+        verified: isCorrect,
+        correction: isCorrect === false ? correctionText : null,
+      };
+
+      console.log('About to submit result:', result);
+
+      
+        console.log('Making API call for observation:', observationID);
+        // Call API to update verification
+        const response = await fetch('/api/dataApiRoutes/observations/validateSpecies/updateVerification/', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            observationID,
+            verification: isCorrect,
+            verificationText: correctionText,
+            // boxID could be added if needed
+          }),
+        });
+
+        console.log('API response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log('API error response:', errorText);
+          throw new Error('Failed to update verification');
+        }
+
+        const responseData = await response.json();
+        console.log('API success response:', responseData);
+
+      console.log("Submitted:", result);
+
+      // Move to next observation or close if done
+      if (currentIndex < observations.length - 1) {
+        console.log('Moving to next observation, currentIndex will be:', currentIndex + 1);
+        currentIndex++;
+        // Reset form state
+        isCorrect = null;
+        correctionText = "";
+      } else {
+        console.log('All observations done, closing modal');
+        // All observations verified, close modal
+        open = false;
+        currentIndex = 0;
+        // Dispatch custom event so parent can listen
+        dispatch("allVerified", { verifiedCount: observations.length });
+      }
+    } catch (error) {
+      console.error('Error updating verification:', error);
+      // Could show error message to user
+    } finally {
+      console.log('Setting isSubmitting to false');
+      isSubmitting = false;
+    }
   }
 
   function handleClose() {
     open = false;
+    currentIndex = 0;
+    isCorrect = null;
+    correctionText = "";
   }
 
   import { createEventDispatcher } from "svelte";
@@ -99,10 +225,16 @@
       <div class="footer">
         <button
           class="submit-btn"
-          on:click={handleSubmit}
-          disabled={isCorrect === null}
+          on:click={handleButtonClick}
+          disabled={isCorrect === null || isSubmitting}
         >
-          Submit
+          {#if isSubmitting}
+            Updating...
+          {:else if currentIndex < observations.length - 1}
+            Next ({currentIndex + 1}/{observations.length})
+          {:else}
+            Complete Verification
+          {/if}
         </button>
       </div>
     </div>
@@ -154,6 +286,16 @@
     padding: 20px 20px 12px;
     position: relative;
     text-align: left;
+  }
+
+  .progress {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
   }
 
   h2 {

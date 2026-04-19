@@ -1,41 +1,77 @@
 <script lang="ts">
-    import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { Pie } from 'svelte-chartjs';
   import { Chart, ArcElement, Tooltip, Legend } from 'chart.js';
+
   Chart.register(ArcElement, Tooltip, Legend);
 
-  let data = $state({
-    labels: ['Kestrels', 'Non-Kestrels'],
-    datasets: [] as any[],
-  });
+  type PieResponse = {
+    kestrelCount: number;
+    otherCount: number;
+    totalCount: number;
+  };
 
-  onMount(() => {
-    const style = getComputedStyle(document.documentElement);
-    const kestrelColor = style.getPropertyValue('--color-core-green-100').trim();
-    const nonkestrelColor = style.getPropertyValue('--color-core-blue-100').trim();
+  let { boxID = null }: { boxID?: string | null } = $props();
+  let lastFetchedBoxID = $state<string | null | undefined>(undefined);
 
-    data.datasets = [
-      {
-        data: [275, 200],
-        backgroundColor: [kestrelColor, nonkestrelColor],
-        borderColor: [kestrelColor, nonkestrelColor],
-        borderWidth: 1,
-      },
-    ];
+  let chartData = $state<PieResponse | null>(null);
+
+  let data = $derived({
+  labels: ['Kestrels', 'Non-Kestrels'],
+
+  datasets: chartData
+    ? [
+        {
+          data: [chartData.kestrelCount, chartData.otherCount],
+          backgroundColor: [
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--color-core-green-100')
+              .trim(),
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--color-core-blue-100')
+              .trim(),
+          ],
+          borderColor: [
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--color-core-green-100')
+              .trim(),
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--color-core-blue-100')
+              .trim(),
+          ],
+          borderWidth: 1,
+        },
+      ]
+    : [],
+});
+
+  async function fetchPieData(id: string | null) {
+    const url = id
+      ? `/api/graphCalcRoutes/pieChart/?boxID=${encodeURIComponent(id)}`
+      : '/api/graphCalcRoutes/pieChart/';
+    const res = await fetch(url);
+    chartData = await res.json();
+  }
+
+  $effect(() => {
+    if (!browser) return;
+    if (lastFetchedBoxID === boxID) return;
+    lastFetchedBoxID = boxID;
+    fetchPieData(boxID);
   });
 
   const options = {
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: {
-    legend: {
-      display: true,
-      position: 'bottom' as const,
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'bottom' as const,
+      },
     },
-  },
-};
+  };
 </script>
 
 <div class="w-[400px]">
-  <Pie {data} {options}/>
+  <Pie {data} {options} />
 </div>

@@ -1,17 +1,50 @@
 <script lang="ts">
    import * as Carousel from "$lib/components/ui/carousel/index.js";
-   import { imageStore } from "../assets/jsonStore.js";
+   import { onMount } from "svelte";
    import { derived } from "svelte/store";
+   import { activeBox } from "$lib/assets/boxStore.js";
+   import { browser } from '$app/environment';
 
-   const carouselImages = derived(
-      imageStore,
-      ($images) => {
-         return Object.entries($images).map(([path, objectUrl]) => ({
-            src: objectUrl,
-            alt: path.split("/").pop() ?? "",
+   
+   type CarouselImage = {
+    src: string;
+    alt: string;
+};
+
+   let images: CarouselImage[] = [];
+
+   async function fetchImages(boxLabel: string) {
+      if (!boxLabel) return;
+
+      const boxID = boxLabel.match(/\d+/)?.[0];
+      if (!boxID) return;
+
+      try {
+         const res = await fetch(
+            `/api/dataApiRoutes/images/imageByBox/?boxID=${boxID}`
+         );
+
+         if (!res.ok) throw new Error("Failed to fetch images");
+
+         const data = await res.json();
+
+         // convert DB rows → carousel format
+         images = data.map((img: any): CarouselImage => ({
+            src: img.src ?? img.filePath,
+            alt: img.originalName ?? `Image ${img.imageID}`
          }));
+      } catch (err) {
+         console.error("Carousel image fetch error:", err);
+         images = [];
       }
-   );
+   }
+
+   onMount(() => {
+      const unsubscribe = activeBox.subscribe((boxLabel) => {
+         fetchImages(boxLabel);
+      });
+      return () => unsubscribe();
+   });
 
    let fullscreenSrc: string | null = null;
    let fullscreenAlt: string = "";
@@ -51,10 +84,10 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-{#if $carouselImages.length > 0}
+{#if images.length > 0}
    <Carousel.Root opts={{ align: "start" }} class="w-full">
       <Carousel.Content class="items-center">
-         {#each $carouselImages as image, i (i)}
+         {#each images as image, i}
             <Carousel.Item class="ps-1 md:basis-1/2 lg:basis-1/3">
                <button
                   class="w-full cursor-pointer border-none bg-transparent p-0 flex items-center justify-center"
@@ -75,7 +108,7 @@
    </Carousel.Root>
 {:else}
    <div class="w-full py-10 text-center text-muted-foreground">
-      No images loaded yet. Please upload a ZIP file.
+      No images available for this box.
    </div>
 {/if}
 
@@ -85,7 +118,7 @@
       class="fixed inset-0 z-50 bg-black/80 w-full h-full border-none cursor-default"
       on:click={closeFullscreen}
       aria-label="Close fullscreen"
-   />
+   ></button>
 
    <!-- Fullscreen image container -->
    <div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">

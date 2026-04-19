@@ -1,10 +1,12 @@
 <script>
     import { get } from 'svelte/store';
-    import { activeBoxData } from '$lib/assets/boxStore.js';
+    import { activeBox, activeBoxData } from '$lib/assets/boxStore.js';
 
     export let isOpen = false;
 
     function closeModal() { isOpen = false; }
+
+    let isExporting = false;
 
     let exportOptions = [
         { id: "species",   label: "Species data",                     checked: false },
@@ -14,97 +16,110 @@
         { id: "images",    label: "Images",                            checked: false },
     ];
 
-    // Load SheetJS once
-    if (typeof window !== 'undefined' && !window.XLSX) {
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-        document.head.appendChild(s);
-    }
+    async function buildExportData() {
+        const selectedBoxLabel = get(activeBox);
+        const selectedBoxId = selectedBoxLabel?.match(/\d+/)?.[0];
 
-    function styleSheet(ws, headers) {
-        const XLSX = window.XLSX;
-        headers.forEach((h, i) => {
-            const cell = ws[XLSX.utils.encode_cell({ r: 0, c: i })];
-            if (!cell) return;
-            cell.s = {
-                font:      { bold: true, color: { rgb: 'FFFFFF' }, name: 'Arial', sz: 11 },
-                fill:      { fgColor: { rgb: '4A7C2F' } },
-                alignment: { horizontal: 'center', vertical: 'center' },
+        if (selectedBoxId) {
+            try {
+                const response = await fetch(`/api/dataApiRoutes/observations/observationByBox/?boxID=${selectedBoxId}`);
+                if (response.ok) {
+                    const observations = await response.json();
+                    if (Array.isArray(observations)) {
+                        const values = observations.map((obs) => {
+                            const observedAt = obs?.observationTime ? new Date(obs.observationTime) : null;
+                            const hasValidDate = observedAt && !Number.isNaN(observedAt.valueOf());
+
+                            return {
+                                box: selectedBoxLabel,
+                                species: obs?.observationSpecies || 'Unknown',
+                                date: hasValidDate ? observedAt.toLocaleDateString() : '',
+                                time: hasValidDate ? observedAt.toLocaleTimeString() : '',
+                                accuracy: Number(obs?.confidence) || 0,
+                                verification: obs?.verification ?? null,
+                                observationID: obs?.observationID ?? null,
+                            };
+                        });
+
+                        return {
+                            name: selectedBoxLabel,
+                            boxID: Number(selectedBoxId) || null,
+                            contains: values.length,
+                            values,
+                        };
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch table-backed observation data for export', error);
+            }
+        }
+
+        const storeBoxData = get(activeBoxData);
+        if (storeBoxData && Array.isArray(storeBoxData.values)) {
+            return {
+                ...storeBoxData,
+                boxID: Number(selectedBoxId) || null,
             };
-        });
-        ws['!cols'] = headers.map(h => ({ wch: Math.min(Math.max(h.length + 6, 14), 40) }));
-        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+        }
+
+        return null;
     }
 
-    function handleExport() {
-        const XLSX = window.XLSX;
-        if (!XLSX)   { alert('Export library still loading, please try again.'); return; }
+    async function handleExport() {
+        const boxData = await buildExportData();
+        if (!boxData) {
+            alert('No data is available for the currently selected box.');
+            return;
+        }
 
-        const boxData = get(activeBoxData);
-        if (!boxData) { alert('No data loaded. Please upload a JSON file first.'); return; }
-
-        const selected = exportOptions.filter(o => o.checked);
+        const selected = exportOptions.filter(o => o.checked).map(o => o.id);
         if (selected.length === 0) { alert('Please select at least one category.'); return; }
 
-        const wb = XLSX.utils.book_new();
+        isExporting = true;
+        try {
+            const response = await fetch('/api/dataApiRoutes/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    boxData,
+                    selectedOptions: selected,
+                }),
+            });
 
-        selected.forEach(({ id, label }) => {
-            let rows = [];
-
-            if (id === 'species') {
-                // Deduplicated species list with sighting count
-                const counts = {};
-                boxData.values.forEach(r => {
-                    const name = r.species?.trim();
-                    counts[name] = (counts[name] ?? 0) + 1;
-                });
-                rows = Object.entries(counts)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([species, count]) => ({ Species: species, Sightings: count }));
+            if (!response.ok) {
+                let message = 'Export failed.';
+                try {
+                    const errorBody = await response.json();
+                    message = errorBody?.error || message;
+                } catch {
+                    // Keep fallback message when server does not return JSON.
+                }
+                alert(message);
+                return;
             }
 
-            else if (id === 'occupancy') {
-                rows = [
-                    { Field: 'Box Name',     Value: boxData.name },
-                    { Field: 'Total Visits', Value: boxData.contains },
-                ];
-            }
+            const blob = await response.blob();
+            const fallbackName = `${String(boxData.name || 'report').replace(/\s+/g, '_')}_report.zip`;
+            const contentDisposition = response.headers.get('content-disposition') || '';
+            const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+            const fileName = match?.[1] || fallbackName;
 
-            else if (id === 'visits') {
-                rows = boxData.values.map(r => ({
-                    Box:      r.box,
-                    Species:  r.species?.trim(),
-                    Date:     r.date,
-                    Time:     r.time,
-                    Accuracy: `${r.accuracy}%`,
-                }));
-            }
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(downloadUrl);
 
-            else if (id === 'verified') {
-                rows = boxData.values
-                    .filter(r => Number(r.accuracy) >= 80)
-                    .map(r => ({
-                        Species:       r.species?.trim(),
-                        Date:          r.date,
-                        Time:          r.time,
-                        'Accuracy (%)': Number(r.accuracy),
-                    }));
-            }
-
-            else if (id === 'images') {
-                rows = [{ Note: 'Image export is not yet supported in this version.' }];
-            }
-
-            const ws = rows.length > 0
-                ? XLSX.utils.json_to_sheet(rows)
-                : XLSX.utils.aoa_to_sheet([['No data available for this category']]);
-
-            if (rows.length > 0) styleSheet(ws, Object.keys(rows[0]));
-            XLSX.utils.book_append_sheet(wb, ws, label.slice(0, 31));
-        });
-
-        XLSX.writeFile(wb, `${boxData.name.replace(' ', '_')}_report.xlsx`);
-        closeModal();
+            closeModal();
+        } catch (error) {
+            console.error('Export request failed', error);
+            alert('Unable to reach the export endpoint. Please try again.');
+        } finally {
+            isExporting = false;
+        }
     }
 </script>
 
@@ -119,9 +134,11 @@
         <div
             class="bg-white rounded-xl p-8 w-full max-w-lg mx-4 relative"
             on:click|stopPropagation
+            on:keydown|stopPropagation
             role="dialog"
             aria-modal="true"
             aria-labelledby="export-modal-title"
+            tabindex="-1"
         >
             <!-- Close Button -->
             <button
@@ -166,9 +183,10 @@
             <!-- Export Button -->
             <button
                 on:click={handleExport}
+                disabled={isExporting}
                 class="bg-green-500 hover:bg-green-700 transition-colors text-white font-bold text-lg px-8 py-3 rounded-lg"
             >
-                Export Report
+                {isExporting ? 'Exporting...' : 'Export Report'}
             </button>
         </div>
     </div>

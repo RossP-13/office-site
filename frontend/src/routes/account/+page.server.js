@@ -16,7 +16,7 @@ export const actions = {
 		}
 
 		try {
-			const success = updateUsername(currentUsername, newUsername);
+			const success = await updateUsername(currentUsername, newUsername);
 			if (success) {
 				// Update the cookie with new username
 				cookies.set('auth_user', newUsername, {
@@ -49,7 +49,7 @@ export const actions = {
 		}
 
 		try {
-			const success = updatePassword(currentUsername, newPassword);
+			const success = await updatePassword(currentUsername, newPassword);
 			if (success) {
 				return { success: true, message: 'Password updated successfully' };
 			} else {

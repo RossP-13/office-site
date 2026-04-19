@@ -45,8 +45,10 @@
 	"dependencies": {
 		"@fontsource/lato": "^5.2.7",
 		"@fontsource/noto-serif": "^5.2.9",
-		"jszip": "^3.10.1",
+		"bcryptjs": "^3.0.3",
 		"chart.js": "^4.5.1",
+		"jszip": "^3.10.1",
+		"mysql2": "^3.22.0",
 		"sveaflet": "^0.1.4",
 		"svelte-chartjs": "^4.0.1"
 	}

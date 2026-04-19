@@ -1,0 +1,39 @@
+{
+  "box2Name": "renwood",
+  "box2Contains": "4",
+  "box2Accuracy": "0.0673",
+  "box2Values": [
+    {
+      "box": "renwood",
+      "species": "COMMON IORA\n",
+      "date": "20260325",
+      "time": "0736.jpg",
+      "accuracy": "0.0455",
+      "image": "images/renwood202603250736.jpg.jpg"
+    },
+    {
+      "box": "renwood",
+      "species": "JAVA SPARROW\n",
+      "date": "20260329",
+      "time": "1538.jpg",
+      "accuracy": "0.1522",
+      "image": "images/renwood202603291538.jpg.jpg"
+    },
+    {
+      "box": "renwood",
+      "species": "VIOLET GREEN SWALLOW\n",
+      "date": "20260402",
+      "time": "1814.jpg",
+      "accuracy": "0.0715",
+      "image": "images/renwood202604021814.jpg.jpg"
+    },
+    {
+      "box": "renwood",
+      "species": "JAVA SPARROW\n",
+      "date": "20260404",
+      "time": "1829.jpg",
+      "accuracy": "0.1264",
+      "image": "images/renwood202604041829.jpg.jpg"
+    }
+  ]
+}

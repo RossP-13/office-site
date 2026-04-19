@@ -3,6 +3,12 @@
 	import Barchart from "./barchart.svelte";
 	import Linechart from "./linechart.svelte";
 	import Piechart from "./piechart.svelte";
+	import { activeBox } from "$lib/assets/boxStore.js";
+
+    let boxID: string | null = null;
+
+	// Derive the numeric box ID from the label (e.g. "Box 1" → "1")
+	$: boxID = $activeBox?.match(/\d+/)?.[0] ?? null;
 </script>
  
 <div class="flex w-full flex-col gap-6">
@@ -21,7 +27,7 @@
         Average hourly visits for Kestrels vs. Non-Kestrels
     </h4>
         <div class="flex justify-center mt-4 pl-15 pr-15">
-            <Linechart/>
+            <Linechart {boxID}/>
         </div>
     </div>
   </Tabs.Content>
@@ -34,7 +40,7 @@
         Daily visit counts by species
     </h4>
         <div class="flex justify-center mt-4 pl-15 pr-15">
-            <Barchart/>
+            <Barchart {boxID}/>
         </div>
     </div>
   </Tabs.Content>
@@ -47,7 +53,7 @@
         Overall visit percentage by species
     </h4>
         <div class="flex justify-center">
-            <Piechart/>
+            <Piechart {boxID}/>
         </div>
     </div>
   </Tabs.Content>

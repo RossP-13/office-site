@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { Line } from 'svelte-chartjs';
   import {
     Chart,
@@ -11,6 +12,13 @@
     Legend,
   } from 'chart.js';
   import type { ChartOptions } from 'chart.js';
+  import type { ChartData } from 'chart.js';
+
+  let chartJsData = $state<ChartData<'line'>>({
+  labels: [],
+  datasets: []
+});
+  
 
   Chart.register(LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -19,56 +27,75 @@
   const pmHours = ['12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
                    '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM', '11:00 PM'];
 
-  const allData = [
-    {
-      label: 'AM (12:00 AM - 11:00 AM)',
-      hours: amHours,
-      kestrel:    [2, 1, 0, 0, 3, 8, 15, 22, 30, 28, 25, 20],
-      nonkestrel: [1, 0, 0, 0, 2, 5, 10, 18, 24, 22, 20, 16],
-    },
-    {
-      label: 'PM (12:00 PM - 11:00 PM)',
-      hours: pmHours,
-      kestrel:    [18, 22, 25, 28, 30, 35, 28, 20, 15, 10, 6, 3],
-      nonkestrel: [14, 18, 20, 22, 25, 30, 22, 16, 12, 8,  4, 2],
-    },
-  ];
+  type LineChartResponse = {
+  kestrelCounts: number[];
+  otherCounts: number[];
+  };
 
-  let currentIndex = $state(0);
-  let kestrelColor = $state('');
-  let nonkestrelColor = $state('');
 
-  let data = $derived({
-    labels: allData[currentIndex].hours,
-    datasets: [
-      {
-        label: 'Kestrel Visits',
-        data: allData[currentIndex].kestrel,
-        borderColor: kestrelColor,
-        backgroundColor: kestrelColor + '33',
-        borderWidth: 2,
-        pointRadius: 4,
-        tension: 0.4,
-        fill: false,
-      },
-      {
-        label: 'Non-Kestrel Visits',
-        data: allData[currentIndex].nonkestrel,
-        borderColor: nonkestrelColor,
-        backgroundColor: nonkestrelColor + '33',
-        borderWidth: 2,
-        pointRadius: 4,
-        tension: 0.4,
-        fill: false,
-      },
-    ],
-  });
+  let chartData = $state<LineChartResponse | null>(null);
+  let currentIndex = $state(0); // 0 = AM, 1 = PM
 
-  onMount(() => {
+  let { boxID = null }: { boxID?: string | null } = $props();
+  let lastFetchedBoxID = $state<string | null | undefined>(undefined);
+
+  async function fetchData(id: string | null) {
+    const url = id
+      ? `/api/graphCalcRoutes/lineChart/?boxID=${encodeURIComponent(id)}`
+      : '/api/graphCalcRoutes/lineChart/';
+    const res = await fetch(url);
+    chartData = await res.json();
+  }
+
+  onMount(async () => {
     const style = getComputedStyle(document.documentElement);
     kestrelColor = style.getPropertyValue('--color-core-green-100').trim();
     nonkestrelColor = style.getPropertyValue('--color-core-blue-100').trim();
   });
+
+  $effect(() => {
+    if (!browser) return;
+    if (lastFetchedBoxID === boxID) return;
+    lastFetchedBoxID = boxID;
+    fetchData(boxID);
+  });
+
+  let kestrelColor = $state('');
+  let nonkestrelColor = $state('');
+
+$effect(() => {
+  if (!chartData) return;
+
+  const isAM = currentIndex === 0;
+
+  chartJsData = {
+    labels: isAM
+      ? Array.from({ length: 12 }, (_, i) => `${i}:00 AM`)
+      : Array.from({ length: 12 }, (_, i) => `${i + 12}:00 PM`),
+
+    datasets: [
+      {
+        label: 'Kestrel Visits',
+        data: isAM
+          ? chartData.kestrelCounts.slice(0, 12)
+          : chartData.kestrelCounts.slice(12, 24),
+        borderColor: kestrelColor,
+        backgroundColor: kestrelColor + '33',
+        tension: 0.4,
+      },
+      {
+        label: 'Non-Kestrel Visits',
+        data: isAM
+          ? chartData.otherCounts.slice(0, 12)
+          : chartData.otherCounts.slice(12, 24),
+        borderColor: nonkestrelColor,
+        backgroundColor: nonkestrelColor + '33',
+        tension: 0.4,
+      },
+    ],
+  };
+});
+
 
   const options: ChartOptions<'line'> = {
     responsive: true,
@@ -82,6 +109,12 @@
     scales: {
       y: {
         beginAtZero: true,
+        grace: 0,
+        ticks: {
+          stepSize: 1,
+          precision: 0,
+          callback: (value) => Math.floor(Number(value)),
+        },
         title: {
           display: true,
           text: 'Number of Visits',
@@ -110,7 +143,7 @@
     </button>
 
     <span class="text-sm font-medium">
-      {allData[currentIndex].label}
+      {currentIndex === 0 ? 'AM (12:00 AM - 11:00 AM)' : 'PM (12:00 PM - 11:00 PM)'}
     </span>
 
     <button
@@ -118,11 +151,11 @@
         text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40
         disabled:cursor-not-allowed"
       onclick={() => currentIndex++}
-      disabled={currentIndex === allData.length - 1}
+      disabled={currentIndex === 1}
     >
       PM →
     </button>
   </div>
 
-  <Line {data} {options} />
+  <Line data={chartJsData} {options} />
 </div>

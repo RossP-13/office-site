@@ -6,7 +6,7 @@ export async function POST({ request, cookies }) {
 	const username = formData.get('username');
 	const password = formData.get('password');
 
-	if (validateCredentials(username, password)) {
+	if (await validateCredentials(username, password)) {
 		// Create a session cookie
 		cookies.set('auth_user', username, {
 			path: '/',

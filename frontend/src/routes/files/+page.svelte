@@ -1,11 +1,12 @@
 <script>
   import JSZip from 'jszip';
-  import { loadJson, loadImages, clearJson, clearImages } from "$lib/assets/jsonStore.js";
+  import { loadJson, clearJson } from "$lib/assets/jsonStore.js";
 
   let message = '';
   let messageType = '';
   let jsonDisplay = '';
-  let imageDisplay = '';
+  let isUploading = false;
+  const IMAGE_BATCH_SIZE = 1;
 
   function openAttachment() {
     document.getElementById('attachment').click();
@@ -19,22 +20,26 @@
     message = '';
     messageType = '';
     jsonDisplay = '';
+    isUploading = true;
     clearJson();
-    clearImages();
 
     if (!file.name.endsWith('.zip')) {
       message = 'Please select a ZIP file';
       messageType = 'error';
+      isUploading = false;
       return;
     }
 
     try {
+      message = 'Reading ZIP file...';
+      messageType = 'info';
       const zip = await JSZip.loadAsync(file);
 
       const jsonFile = zip.file('output.json');
       if (!jsonFile) {
         message = 'ZIP is missing output.json. Please check the file structure.';
         messageType = 'error';
+        isUploading = false;
         return;
       }
 
@@ -45,33 +50,75 @@
       } catch {
         message = 'output.json contains invalid JSON. Please reupload or call IT support.';
         messageType = 'error';
+        isUploading = false;
         return;
       }
 
-      const imageMap = {};
       const imageFiles = Object.keys(zip.files).filter(
         name => name.startsWith('images/') && !zip.files[name].dir
       );
 
-      await Promise.all(
-        imageFiles.map(async (imagePath) => {
+      message = 'Importing metadata...';
+      messageType = 'info';
+
+      // Phase 1: import all JSON metadata once.
+      const metadataRes = await fetch('/api/dataApiRoutes/massImport', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: jsonText
+      });
+
+      const metadataResult = await metadataRes.json();
+      if (!metadataRes.ok || !metadataResult?.success) {
+        throw new Error(metadataResult?.error || 'Metadata import failed');
+      }
+
+      jsonDisplay = JSON.stringify(metadataResult, null, 2);
+
+      if (imageFiles.length) {
+        message = `Metadata imported. Uploading images... 0 / ${imageFiles.length}. Please stay on this page.`;
+        messageType = 'info';
+      }
+
+      // Upload in batches to avoid oversized multipart requests that can reset the connection.
+      for (let i = 0; i < imageFiles.length; i += IMAGE_BATCH_SIZE) {
+        const batchPaths = imageFiles.slice(i, i + IMAGE_BATCH_SIZE);
+        const formData = new FormData();
+
+        for (const imagePath of batchPaths) {
           const blob = await zip.files[imagePath].async('blob');
-          const objectUrl = URL.createObjectURL(blob);
-          imageMap[imagePath] = objectUrl;
-        })
-      );
+          const filename = imagePath.split('/').pop();
+          formData.append(imagePath, blob, filename);
+        }
+
+        const importRes = await fetch('/api/dataApiRoutes/massImport', {
+          method: 'POST',
+          body: formData
+        });
+
+        const importResult = await importRes.json();
+        if (!importRes.ok || !importResult?.success) {
+          throw new Error(importResult?.error || 'Database import failed');
+        }
+
+        message = `Uploading images... ${Math.min(i + IMAGE_BATCH_SIZE, imageFiles.length)} / ${imageFiles.length}. Please stay on this page.`;
+        messageType = 'info';
+        jsonDisplay = JSON.stringify(importResult, null, 2);
+      }
 
       loadJson(jsonContent);
-      loadImages(imageMap);
 
-      message = `File loaded successfully — ${imageFiles.length} image(s) found.`;
+      message = `File imported successfully — ${imageFiles.length} image(s) found.`;
       messageType = 'success';
-      jsonDisplay = JSON.stringify(jsonContent, null, 2);
 
     } catch (err) {
       console.error(err);
-      message = 'Error reading ZIP file. Please reupload or call IT support for assistance.';
+      message = err?.message || 'Error reading ZIP file. Please reupload or call IT support for assistance.';
       messageType = 'error';
+    } finally {
+      isUploading = false;
     }
 
     event.target.value = '';
@@ -84,7 +131,7 @@
   <p class="drop-label font-sans!">Drop ZIP or click below!</p>
 
   <input type="file" id="attachment" accept=".zip" style="display:none" on:change={fileSelected}/>
-  <button id="btnAttachment" on:click={openAttachment} class="rounded-sm! font-sans!">
+  <button id="btnAttachment" on:click={openAttachment} class="rounded-sm! font-sans!" disabled={isUploading}>
     Upload Files <img src="/icons/upload.svg" alt="Upload Icon"/>
   </button>
 </div>
@@ -95,10 +142,6 @@
 
 {#if jsonDisplay}
   <pre id="jsonDisplay">{jsonDisplay}</pre>
-{/if}
-
-{#if imageDisplay}
-  <pre id="imageDisplay">{imageDisplay}</pre>
 {/if}
 
 <!-- CSS SECTION -->
@@ -162,10 +205,21 @@
     border: 1px solid #c3e6cb;
   }
 
+  .message.info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+  }
+
   .message.error {
     background-color: #f8d7da;
     color: #721c24;
     border: 1px solid #f5c6cb;
+  }
+
+  #btnAttachment:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
   }
 
   #jsonDisplay {
